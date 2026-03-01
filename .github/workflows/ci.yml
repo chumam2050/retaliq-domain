@@ -27,6 +27,8 @@ jobs:
 
       - name: Build & test via Makefile
         run: |
+          # remove any generated files that may be owned by root/fakeroot
+          sudo rm -rf debian/.debhelper/generated
           make clean
           make all
           # `make all` runs tests and produces binaries/packages
