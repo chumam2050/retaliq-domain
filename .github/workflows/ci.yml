@@ -1,0 +1,39 @@
+name: Retaliq Domain CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build & test via Makefile
+        run: |
+          make clean
+          make all
+          # `make all` runs tests and produces binaries/packages
+
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Upload to Google Drive
+        uses: glotlabs/drive-upload@v1
+        with:
+          config: ${{ secrets.GDRIVE_CREDENTIALS }}
+          folderId: ${{ vars.GDRIVE_FOLDER_ID }}
+          files: 'dist/**'

@@ -11,11 +11,16 @@ PACKAGE := retaliq-domain
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")
 VERSION := $(patsubst v%,%,$(VERSION))
 
+# run Go unit tests
+.PHONY: test
+test:
+	go test ./... -v
+
 GOFLAGS :=
 
-.PHONY: all deb windows macos clean
+.PHONY: all deb windows macos clean test
 
-all: deb windows macos
+all: test deb windows macos
 	@mkdir -p dist
 
 deb:
