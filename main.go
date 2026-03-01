@@ -8,29 +8,27 @@ import (
     "runtime"
     "strings"
 
-    "github.com/joho/godotenv"
 )
 
 func main() {
-    // load .env if present (deprecated, kept for backwards compatibility)
-    _ = godotenv.Load()
-
     // command-line flags
     var (
         cfgPath     string
         flagKey     string
         flagAllowed string
+        flagPort    string
         saveConfig  bool
     )
     flag.StringVar(&cfgPath, "config", "", "path to JSON config file")
     flag.StringVar(&flagKey, "apikey", "", "API key (overrides other sources)")
     flag.StringVar(&flagAllowed, "allowed", "", "comma-separated allowed IPs (overrides other sources)")
+    flag.StringVar(&flagPort, "port", "", "port to listen on (overrides environment)")
     flag.BoolVar(&saveConfig, "save-config", false, "write effective configuration back to config file and exit")
     flag.Parse()
 
-    // initial values come from env (old behaviour)
-    apiKey := os.Getenv("RETALIQ_API_KEY")
-    allowed := parseAllowed(os.Getenv("RETALIQ_ALLOWED_IPS"))
+    // initial values
+    var apiKey string
+    allowed = make(map[string]struct{})
 
     // if a config file path wasn't provided, use default location
     if cfgPath == "" {
@@ -60,7 +58,7 @@ func main() {
     }
 
     if apiKey == "" {
-        log.Fatal("API key must be provided via -apikey, config file, or RETALIQ_API_KEY")
+        log.Fatal("API key must be provided via -apikey or config file")
     }
     if len(allowed) == 0 {
         log.Fatal("allowed IP list must contain at least one address")
@@ -79,10 +77,8 @@ func main() {
         return
     }
 
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = os.Getenv("RETALIQ_DOMAIN_PORT")
-    }
+    // determine port: command-line flag only; default to 8888
+    port := flagPort
     if port == "" {
         port = "8888"
     }

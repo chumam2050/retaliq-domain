@@ -68,16 +68,57 @@ internal known addresses (loopback, host IP, docker bridge).
 
 ## Program overview
 
-The `retaliq-domain` binary is a simple HTTP helper used by the Retaliq
-platform to manage dynamic DNS entries in `/etc/hosts`. It listens on port
-8888 and exposes a small API guarded by an API key. Key endpoints include:
+The `retaliq-domain` binary is the core helper that the setup script
+manages. It provides an HTTP API for manipulating the system's `/etc/hosts`
+file, mainly so containers and services can request DNS entries at runtime.
 
-* `POST /hosts` – accepts a JSON array of hostnames to append to `/etc/hosts`.
-* `GET /version` (for example) – prints version information.
+### Operation
 
-Configuration is provided solely via command-line flags (currently `-config`
-for the JSON configuration file). The helper writes minimal logs to stdout
-which are captured by systemd when running as a service.
+* **Port**: defaults to `8888` but may be changed via the `-port`
+  command-line flag.
+* **Hosts file**: writes to `/etc/hosts` on Unix; a Windows path is encoded in
+  `defaultHostsPath()`.
+* **Logging**: minimal info to stdout/stderr; systemd captures logs when
+  running as a service.
+
+### Endpoints
+
+* `POST /hosts` – expects a JSON array of hostnames; the helper adds each
+  name to `/etc/hosts` if not already present. Requires header
+  `X-Api-Key: <key>`.
+* `GET /version` – returns program version and build info (if implemented).
+* Additional endpoints may exist (check source in `handler.go`).
+
+### Configuration and CLI flags
+
+Flags (see `main.go`):
+
+```
+-config    path to JSON config file (default /etc/retaliq-domain.json)
+-apikey    API key (overrides config file)
+-allowed   comma-separated allowed IP addresses
+-save-config  write effective config back to file and exit
+```
+
+A configuration file is a simple JSON object containing `api_key` and
+`allowed_ips` (array). Command-line flags override file values.
+
+When invoked with `-save-config`, the helper writes out whatever key/ip list
+is currently in effect and then exits, useful for bootstrapping.
+
+### Example invocation
+
+```sh
+./retaliq-domain -config /etc/retaliq-domain.json
+```
+
+or to generate a config:
+
+```sh
+./retaliq-domain -apikey mysecret -allowed 127.0.0.1,10.0.0.1 -save-config
+```
+
+
 
 ## Example Usage
 
