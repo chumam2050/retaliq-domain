@@ -45,7 +45,9 @@ fi
 cd ..
 # disable dwz invocation which sometimes fails on Go binaries
 export DH_NO_DWZ=1
-dpkg-buildpackage -us -uc
+# -b: binary-only build, avoids debhelper snapshotting the full source tree
+# (which would include read-only Go module cache files)
+dpkg-buildpackage -us -uc -b
 
 # move deb to dist if exists
 pkgroot=$(dirname "$0")/..

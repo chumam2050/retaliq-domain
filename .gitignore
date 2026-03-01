@@ -8,6 +8,7 @@ retaliq-domain.log
 # build folders and artifacts
 debian/retaliq-domain/
 dist/
+debian/.debhelper
 
 # editor/OS cruft
 .DS_Store
