@@ -89,6 +89,44 @@ func generateKey() string {
 
 // Save writes the configuration to the given path in key=value form.
 // The write is performed atomically.
+// AddAllowedIP loads the config from path, appends the given ip to the
+// allowed list (if not already present), and saves the file.
+func AddAllowedIP(path, ip string) error {
+    cfg, err := LoadConfig(path)
+    if err != nil && !os.IsNotExist(err) {
+        return err
+    }
+    // ensure slice initialized
+    if cfg == nil {
+        cfg = &Config{}
+    }
+    for _, existing := range cfg.AllowedIPs {
+        if existing == ip {
+            return cfg.Save(path)
+        }
+    }
+    cfg.AllowedIPs = append(cfg.AllowedIPs, ip)
+    return cfg.Save(path)
+}
+
+// RegenerateKey generates a new random API key, writes it into the config file
+// at path (creating the file if necessary) and returns the key.
+func RegenerateKey(path string) (string, error) {
+    cfg, err := LoadConfig(path)
+    if err != nil && !os.IsNotExist(err) {
+        return "", err
+    }
+    if cfg == nil {
+        cfg = &Config{}
+    }
+    key := generateKey()
+    cfg.APIKey = key
+    if err := cfg.Save(path); err != nil {
+        return "", err
+    }
+    return key, nil
+}
+
 func (c *Config) Save(path string) error {
     var b strings.Builder
     if c.APIKey != "" {

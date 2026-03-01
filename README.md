@@ -45,6 +45,28 @@ The script exposes the following commands:
 
 ## Configuration
 
+### CLI commands
+
+Because the helper usually runs as a long‑lived service, you can manipulate
+its configuration directly via the executable instead of talking to the
+HTTP API. The following invocations are available:
+
+```sh
+# add a single address to allowed_ips
+retaliq-domain add-ip 1.2.3.4
+
+# generate (or renew) API key and print it
+retaliq-domain gen-key
+
+# dump current config values to stdout
+retaliq-domain show
+```
+
+Under the hood these commands load the same config file used by the service
+and update it atomically; nothing is sent over the network.
+
+## Configuration
+
 The default configuration file (`/etc/retaliq-domain/config.conf`) is a
 simple key/value list with two settings. Blank lines and lines starting with
 `#` are ignored.  If an existing file lacks an `api_key`, the helper will

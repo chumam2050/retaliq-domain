@@ -2,6 +2,7 @@ package main
 
 import (
     "flag"
+    "fmt"
     "log"
     "net/http"
     "os"
@@ -34,6 +35,14 @@ func main() {
     // if a config file path wasn't provided, use default location
     if cfgPath == "" {
         cfgPath = DefaultConfigPath()
+    }
+
+    // if we were invoked with a positional command (add-ip, gen-key, show)
+    // handle it and exit without starting the HTTP server.
+    if len(flag.Args()) > 0 {
+        if handled := handleCLI(cfgPath, flag.Args()); handled {
+            return
+        }
     }
 
     // if a config file exists attempt to load it
@@ -92,6 +101,39 @@ func main() {
 
     if err := http.ListenAndServe(":"+port, nil); err != nil {
         log.Fatalf("server failed: %v", err)
+    }
+}
+
+// handleCLI inspects the first positional argument and performs a
+// quick configuration modification.  Returns true if a command was handled.
+func handleCLI(cfgPath string, args []string) bool {
+    cmd := args[0]
+    switch cmd {
+    case "add-ip":
+        if len(args) != 2 {
+            log.Fatalf("usage: %s add-ip <ip>", os.Args[0])
+        }
+        if err := AddAllowedIP(cfgPath, args[1]); err != nil {
+            log.Fatalf("add-ip failed: %v", err)
+        }
+        fmt.Printf("added %s to allowed_ips (file %s)\n", args[1], cfgPath)
+        return true
+    case "gen-key", "generate-key":
+        key, err := RegenerateKey(cfgPath)
+        if err != nil {
+            log.Fatalf("gen-key failed: %v", err)
+        }
+        fmt.Println(key)
+        return true
+    case "show":
+        cfg, err := LoadConfig(cfgPath)
+        if err != nil {
+            log.Fatalf("show failed: %v", err)
+        }
+        fmt.Printf("api_key=%s\nallowed_ips=%s\n", cfg.APIKey, strings.Join(cfg.AllowedIPs, ","))
+        return true
+    default:
+        return false
     }
 }
 

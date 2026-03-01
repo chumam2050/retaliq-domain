@@ -90,6 +90,73 @@ func TestAutoGenerateKey(t *testing.T) {
     }
 }
 
+func TestAddAllowedIP(t *testing.T) {
+    tmp := t.TempDir() + "/cfg.conf"
+    cfg := &Config{APIKey: "x", AllowedIPs: []string{"1.1.1.1"}}
+    if err := cfg.Save(tmp); err != nil {
+        t.Fatalf("save failed: %v", err)
+    }
+    if err := AddAllowedIP(tmp, "2.2.2.2"); err != nil {
+        t.Fatalf("AddAllowedIP failed: %v", err)
+    }
+    got, err := LoadConfig(tmp)
+    if err != nil {
+        t.Fatalf("load failed: %v", err)
+    }
+    if len(got.AllowedIPs) != 2 {
+        t.Errorf("unexpected ips: %v", got.AllowedIPs)
+    }
+}
+
+func TestRegenerateKeyFunc(t *testing.T) {
+    tmp := t.TempDir() + "/cfg.conf"
+    // start with no file
+    key, err := RegenerateKey(tmp)
+    if err != nil {
+        t.Fatalf("RegenerateKey failed: %v", err)
+    }
+    if key == "" {
+        t.Fatal("expected non-empty key")
+    }
+    got, err := LoadConfig(tmp)
+    if err != nil {
+        t.Fatalf("load failed: %v", err)
+    }
+    if got.APIKey != key {
+        t.Errorf("key mismatch, got %s", got.APIKey)
+    }
+}
+
+func TestHandleCLICommands(t *testing.T) {
+    tmp := t.TempDir() + "/cfg.conf"
+    // write initial config with one address
+    if err := os.WriteFile(tmp, []byte("allowed_ips=1.1.1.1"), 0600); err != nil {
+        t.Fatalf("write failed: %v", err)
+    }
+    if !handleCLI(tmp, []string{"add-ip", "2.2.2.2"}) {
+        t.Fatal("add-ip not handled")
+    }
+    cfg, err := LoadConfig(tmp)
+    if err != nil {
+        t.Fatalf("load after add-ip: %v", err)
+    }
+    if len(cfg.AllowedIPs) != 2 {
+        t.Errorf("add-ip did not append, got %v", cfg.AllowedIPs)
+    }
+    // gen-key
+    if !handleCLI(tmp, []string{"gen-key"}) {
+        t.Fatal("gen-key not handled")
+    }
+    cfg2, _ := LoadConfig(tmp)
+    if cfg2.APIKey == "" {
+        t.Error("gen-key failed to write key")
+    }
+    // show should be handled but we don't assert output here
+    if !handleCLI(tmp, []string{"show"}) {
+        t.Fatal("show not handled")
+    }
+}
+
 func TestOverrideOrdering(t *testing.T) {
     // write a config file and then call main logic via helper
     tmp := t.TempDir() + "/cfg.conf"

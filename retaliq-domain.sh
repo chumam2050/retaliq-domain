@@ -67,15 +67,11 @@ show_info() {
 
 regen_key() {
     ensure_config
-    local newkey
-    newkey=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=')
-    # replace or append api_key line
-    if grep -q '^api_key=' "$CONFIG"; then
-        sed -i "s|^api_key=.*|api_key=$newkey|" "$CONFIG"
+    if "$BIN" gen-key -config "$CONFIG" >/dev/null 2>&1; then
+        echo "new API key written to $CONFIG"
     else
-        echo "api_key=$newkey" >> "$CONFIG"
+        echo "failed to generate key via CLI" >&2
     fi
-    echo "new API key written to $CONFIG"
     reload
 }
 
@@ -102,14 +98,10 @@ set_allowed_ip_hosts() {
             all_ips+=("$ip")
         fi
     done
-    # combine into comma list
-    local newlist
-    IFS=',' newlist="${all_ips[*]}"
-    if grep -q '^allowed_ips=' "$CONFIG"; then
-        sed -i "s|^allowed_ips=.*|allowed_ips=$newlist|" "$CONFIG"
-    else
-        echo "allowed_ips=$newlist" >> "$CONFIG"
-    fi
+    # write each new address via CLI
+    for ip in "${all_ips[@]}"; do
+        $BIN add-ip -config "$CONFIG" "$ip" >/dev/null 2>&1 || true
+    done
     echo "updated allowed_ips in $CONFIG"
     reload
 }
