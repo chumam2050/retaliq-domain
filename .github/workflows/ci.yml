@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v3
 
@@ -26,26 +23,35 @@ jobs:
           sudo apt-get install -y build-essential debhelper-compat golang-go devscripts
 
       - name: Build & test via Makefile
-        run: |
-          # `make all` runs tests and produces binaries/packages
-          make all
-          # clean up build artifacts (chmod first to handle read-only Go module cache files)
-          sudo chmod -R u+w debian/.debhelper 2>/dev/null || true
-          sudo rm -rf debian/.debhelper
-          sudo rm -rf dist 
-          sudo rm -rf retaliq-domain
-          sudo rm -rf retaliq-domain*darwin* 
-          sudo rm -rf retaliq-domain*windows*
-          sudo rm -rf retaliq-domain_*.deb
+        run: make all
+        # Note: I removed the 'rm -rf' commands. 
+        # Keep the files here so we can upload them!
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-outputs
+          path: dist/ # This saves everything in your dist folder
 
   upload:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Upload to Google Drive
-        uses: glotlabs/drive-upload@v1
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
         with:
-          config: ${{ secrets.GDRIVE_CREDENTIALS }}
-          folderId: ${{ vars.GDRIVE_FOLDER_ID }}
-          files: 'dist/**'
+          name: build-outputs
+          path: dist/
+
+      - name: Install rclone
+        uses: shogo82148/actions-setup-rclone@v1
+
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone/
+          echo "${{ secrets.RCLONE_CONFIG }}" > ~/.config/rclone/rclone.conf
+
+      - name: Upload to Google Drive
+        run: |
+          # Sync the dist folder to the remote
+          rclone copy dist/ gdrive:retaliq/repos
