@@ -24,14 +24,12 @@ jobs:
 
       - name: Build & test via Makefile
         run: make all
-        # Note: I removed the 'rm -rf' commands. 
-        # Keep the files here so we can upload them!
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-outputs
-          path: dist/ # This saves everything in your dist folder
+          path: dist/
 
   upload:
     needs: build
@@ -44,14 +42,21 @@ jobs:
           path: dist/
 
       - name: Install rclone
-        uses: shogo82148/actions-setup-rclone@v1
+        run: |
+          # Official Rclone install script
+          sudo curl https://rclone.org/install.sh | sudo bash
 
       - name: Configure rclone
         run: |
           mkdir -p ~/.config/rclone/
           echo "${{ secrets.RCLONE_CONFIG }}" > ~/.config/rclone/rclone.conf
 
+      - name: Verify Rclone Setup
+        run: |
+          # This helps you debug if the config is read correctly
+          rclone listremotes
+
       - name: Upload to Google Drive
         run: |
-          # Sync the dist folder to the remote
+          # Copy files to your specific folder path
           rclone copy dist/ gdrive:retaliq/repos
