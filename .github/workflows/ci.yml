@@ -31,30 +31,30 @@ jobs:
           name: build-outputs
           path: dist/
 
-  upload:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-outputs
-          path: dist/
+  # upload:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Download Artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: build-outputs
+  #         path: dist/
 
-      - name: Install rclone
-        run: |
-          sudo curl https://rclone.org/install.sh | sudo bash
+  #     - name: Install rclone
+  #       run: |
+  #         sudo curl https://rclone.org/install.sh | sudo bash
 
-      - name: Configure rclone
-        run: |
-          mkdir -p ~/.config/rclone/
-          # 1. Decode the Base64 secret back into a real .json file
-          echo "${{ secrets.GDRIVE_SA_BASE64 }}" | base64 -d > ~/.config/rclone/service-account.json
+  #     - name: Configure rclone
+  #       run: |
+  #         mkdir -p ~/.config/rclone/
+  #         # 1. Decode the Base64 secret back into a real .json file
+  #         echo "${{ secrets.GDRIVE_SA_BASE64 }}" | base64 -d > ~/.config/rclone/service-account.json
           
-          # 2. Create a clean rclone.conf that points to this file
-          # We don't embed the JSON here, we just reference the file!
-          printf "[gdrive]\ntype = drive\nscope = drive\nservice_account_file = /home/runner/.config/rclone/service-account.json" > ~/.config/rclone/rclone.conf
+  #         # 2. Create a clean rclone.conf that points to this file
+  #         # We don't embed the JSON here, we just reference the file!
+  #         printf "[gdrive]\ntype = drive\nscope = drive\nservice_account_file = /home/runner/.config/rclone/service-account.json" > ~/.config/rclone/rclone.conf
 
-      - name: Upload to Google Drive
-        run: |
-          rclone copy dist/ gdrive:retaliq/repos
+  #     - name: Upload to Google Drive
+  #       run: |
+  #         rclone copy dist/ gdrive:retaliq/repos
