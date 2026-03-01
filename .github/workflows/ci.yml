@@ -27,11 +27,15 @@ jobs:
 
       - name: Build & test via Makefile
         run: |
-          # remove any generated files that may be owned by root/fakeroot
-          sudo rm -rf debian/.debhelper/generated
-          make clean
-          make all
           # `make all` runs tests and produces binaries/packages
+          make all
+          # clean up build artifacts
+          sudo rm -rf debian/.debhelper
+          sudo rm -rf dist 
+          sudo rm -rf retaliq-domain
+          sudo rm -rf retaliq-domain*darwin* 
+          sudo rm -rf retaliq-domain*windows*
+          sudo rm -rf retaliq-domain_*.deb
 
   upload:
     needs: build

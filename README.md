@@ -182,6 +182,17 @@ cd apps/domain
 docker build -t retaliq-domain-dev .
 ```
 
+If you ever need to wipe out all generated artefacts, the `Makefile` provides
+`make clean`, which removes the `dist` directory plus any local binaries and
+Debian packages:
+
+```sh
+make clean        # equivalent to rm -rf dist && rm -f retaliq-domain*darwin* retaliq-domain*windows* && rm -f ../retaliq-domain_*.deb
+```
+
+You can run that manually on the host or inside the container before starting
+a fresh build.
+
 Start an interactive shell via plain Docker:
 
 ```sh
