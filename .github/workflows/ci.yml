@@ -49,8 +49,7 @@ jobs:
       - name: Configure rclone
         run: |
           mkdir -p ~/.config/rclone/
-          echo "${{ secrets.RCLONE_CONFIG }}" > ~/.config/rclone/rclone.conf
-
+          printf '%s' "${{ secrets.RCLONE_CONFIG }}" > ~/.config/rclone/rclone.conf
       - name: Verify Rclone Setup
         run: |
           # This helps you debug if the config is read correctly
