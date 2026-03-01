@@ -2,11 +2,13 @@ package main
 
 import (
     "os"
+    "runtime"
+    "strings"
     "testing"
 )
 
 func TestConfigLoadSave(t *testing.T) {
-    tmp := t.TempDir() + "/cfg.json"
+    tmp := t.TempDir() + "/cfg.conf"
     cfg := &Config{
         APIKey:     "k",
         AllowedIPs: []string{"1.2.3.4", "5.6.7.8"},
@@ -35,13 +37,19 @@ func TestLoadConfig_missing(t *testing.T) {
 
 func TestDefaultConfigPath(t *testing.T) {
     p := DefaultConfigPath()
-    if p == "" {
-        t.Error("default config path should not be empty")
+    if runtime.GOOS == "windows" {
+        if !strings.HasSuffix(p, `\\retaliq-domain\\config.conf`) {
+            t.Errorf("unexpected windows default path: %s", p)
+        }
+    } else {
+        if !strings.HasPrefix(p, "/etc/") || !strings.HasSuffix(p, "/config.conf") {
+            t.Errorf("unexpected default path: %s", p)
+        }
     }
 }
 
 func TestSaveConfigFlag(t *testing.T) {
-    tmp := t.TempDir() + "/cfg.json"
+    tmp := t.TempDir() + "/cfg.conf"
     // simulate loading environment and flags
     apiKey := "xyz"
     cfg := &Config{APIKey: apiKey, AllowedIPs: []string{"1.2.3.4"}}
@@ -58,9 +66,33 @@ func TestSaveConfigFlag(t *testing.T) {
     }
 }
 
+func TestAutoGenerateKey(t *testing.T) {
+    tmp := t.TempDir() + "/nodata.conf"
+    // create a file with allowed_ips only
+    if err := os.WriteFile(tmp, []byte("allowed_ips=1.2.3.4"), 0600); err != nil {
+        t.Fatalf("failed to create tmp file: %v", err)
+    }
+    cfg, err := LoadConfig(tmp)
+    if err != nil {
+        t.Fatalf("load failed: %v", err)
+    }
+    if cfg.APIKey == "" {
+        t.Errorf("expected generated API key")
+    }
+    // re-read file to ensure key was written
+    // re-load file to ensure the new key was persisted
+    cfg2, err2 := LoadConfig(tmp)
+    if err2 != nil {
+        t.Fatalf("reload failed: %v", err2)
+    }
+    if cfg2.APIKey == "" {
+        t.Errorf("config file was not updated with api_key, still empty")
+    }
+}
+
 func TestOverrideOrdering(t *testing.T) {
     // write a config file and then call main logic via helper
-    tmp := t.TempDir() + "/cfg.json"
+    tmp := t.TempDir() + "/cfg.conf"
     cfg := &Config{APIKey: "fromconfig", AllowedIPs: []string{"1.1.1.1"}}
     _ = cfg.Save(tmp)
 

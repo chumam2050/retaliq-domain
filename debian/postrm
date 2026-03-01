@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# postrm script for retaliq-domain
+
+case "$1" in
+  purge)
+    # disable unit if present, silence errors harmlessly
+    systemctl disable retaliq-domain.service >/dev/null 2>&1 || true
+    rm -f /etc/retaliq-domain/config.conf
+    # optionally remove directory if empty
+    rmdir --ignore-fail-on-non-empty /etc/retaliq-domain || true
+    ;;  
+esac

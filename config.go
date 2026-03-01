@@ -1,26 +1,26 @@
 package main
 
 import (
-    "encoding/json"
+    "encoding/base64"
     "os"
     "runtime"
+    "strings"
+    "crypto/rand"
 )
 
 // Config holds persistent configuration for the domain helper service.
-// It is stored in JSON format by default (path may be provided via -config).
-// A simple file is chosen because it's cross-platform and easily editable by
-// helper scripts; on Windows the Windows registry could be used instead but
-// a text file works equally well and is easier to manage from non-PowerShell.
+// We use a plain key=value file, similar to Apache/INI snippets.  The
+// format is intentionally minimal so it can be edited by hand or by the
+// setup helper without needing a JSON parser.  Lines beginning with `#` are
+// ignored as comments.
 //
 // Example:
-// {
-//     "api_key": "secret",
-//     "allowed_ips": ["127.0.0.1", "172.17.0.1"]
-// }
+// api_key = secret
+// allowed_ips = 127.0.0.1,172.17.0.1
 
 type Config struct {
-    APIKey     string   `json:"api_key"`
-    AllowedIPs []string `json:"allowed_ips"`
+    APIKey     string
+    AllowedIPs []string
 }
 
 // DefaultConfigPath returns a sensible location for the configuration file
@@ -28,33 +28,81 @@ type Config struct {
 // -config flag.
 func DefaultConfigPath() string {
     if runtime.GOOS == "windows" {
-        return os.Getenv("ProgramData") + "\\retaliq-domain\\config.json"
+        return os.Getenv("ProgramData") + "\\retaliq-domain\\config.conf"
     }
-    return "/etc/retaliq-domain.json"
+    return "/etc/retaliq-domain/config.conf"
 }
 
-// LoadConfig reads the JSON configuration from path. If the file does not
-// exist or cannot be parsed an error is returned.
+// LoadConfig reads the key=value configuration from path. If the file does
+// not exist or cannot be parsed an error is returned.
 func LoadConfig(path string) (*Config, error) {
     data, err := os.ReadFile(path)
     if err != nil {
         return nil, err
     }
-    var cfg Config
-    if err := json.Unmarshal(data, &cfg); err != nil {
-        return nil, err
+    lines := strings.Split(string(data), "\n")
+    cfg := &Config{}
+    for _, line := range lines {
+        line = strings.TrimSpace(line)
+        if line == "" || strings.HasPrefix(line, "#") {
+            continue
+        }
+        parts := strings.SplitN(line, "=", 2)
+        if len(parts) != 2 {
+            continue
+        }
+        key := strings.TrimSpace(parts[0])
+        val := strings.TrimSpace(parts[1])
+        switch key {
+        case "api_key":
+            cfg.APIKey = val
+        case "allowed_ips":
+            if val != "" {
+                for _, ip := range strings.Split(val, ",") {
+                    cfg.AllowedIPs = append(cfg.AllowedIPs, strings.TrimSpace(ip))
+                }
+            }
+        }
     }
-    return &cfg, nil
+
+    // if there was no API key we generate one and persist it, so that subsequent
+    // runs and the helper script can rely on its presence.
+    if cfg.APIKey == "" {
+        cfg.APIKey = generateKey()
+        // attempt to save, ignore errors (file may be read-only)
+        _ = cfg.Save(path)
+    }
+
+    return cfg, nil
 }
 
-// Save writes the configuration to the given path atomically.
+// generateKey returns a URL-safe random string suitable for use
+// as an API key.  The length is 32 bytes base64-encoded, similar to what
+// the helper script produces with openssl.
+func generateKey() string {
+    b := make([]byte, 24)
+    if _, err := rand.Read(b); err != nil {
+        return ""
+    }
+    return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// Save writes the configuration to the given path in key=value form.
+// The write is performed atomically.
 func (c *Config) Save(path string) error {
-    data, err := json.MarshalIndent(c, "", "  ")
-    if err != nil {
-        return err
+    var b strings.Builder
+    if c.APIKey != "" {
+        b.WriteString("api_key = ")
+        b.WriteString(c.APIKey)
+        b.WriteString("\n")
+    }
+    if len(c.AllowedIPs) > 0 {
+        b.WriteString("allowed_ips = ")
+        b.WriteString(strings.Join(c.AllowedIPs, ","))
+        b.WriteString("\n")
     }
     tmp := path + ".tmp"
-    if err := os.WriteFile(tmp, data, 0600); err != nil {
+    if err := os.WriteFile(tmp, []byte(b.String()), 0600); err != nil {
         return err
     }
     return os.Rename(tmp, path)

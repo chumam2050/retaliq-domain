@@ -1,0 +1,11 @@
+[Unit]
+Description=Retaliq domain helper
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/retaliq-domain -config /etc/retaliq-domain/config.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

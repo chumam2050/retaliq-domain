@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+# Debian packaging rules for retaliq-domain
+
+export DH_VERBOSE=1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# build Go binary (source root is apps/domain during dh build)
+	go build -o retaliq-domain ./
+
+override_dh_auto_clean:
+	rm -f retaliq-domain
+
+override_dh_dwz:
+	# skip dwz compression which fails on Go binary
+	true

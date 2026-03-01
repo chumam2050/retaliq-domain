@@ -19,7 +19,7 @@ func main() {
         flagPort    string
         saveConfig  bool
     )
-    flag.StringVar(&cfgPath, "config", "", "path to JSON config file")
+    flag.StringVar(&cfgPath, "config", "", "path to config file")
     flag.StringVar(&flagKey, "apikey", "", "API key (overrides other sources)")
     flag.StringVar(&flagAllowed, "allowed", "", "comma-separated allowed IPs (overrides other sources)")
     flag.StringVar(&flagPort, "port", "", "port to listen on (overrides environment)")
@@ -28,6 +28,7 @@ func main() {
 
     // initial values
     var apiKey string
+    var allowed map[string]struct{}
     allowed = make(map[string]struct{})
 
     // if a config file path wasn't provided, use default location

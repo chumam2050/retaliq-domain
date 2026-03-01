@@ -1,0 +1,14 @@
+Source: retaliq-domain
+Section: net
+Priority: optional
+Maintainer: Choerul Umam <choerulumam2050@gmail.com>
+Build-Depends: debhelper-compat (= 13), golang-go
+Standards-Version: 4.5.0
+Homepage: https://github.com/chumam2050/retaliq-domain
+
+Package: retaliq-domain
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd
+Description: Retaliq domain helper service
+ A small HTTP helper for dynamically managing /etc/hosts entries.
+ Utilities and setup scripts bundled; provides a systemd service.

@@ -1,0 +1,51 @@
+#!/bin/sh
+set -e
+
+# postinst script for retaliq-domain
+
+case "$1" in
+  configure)
+    # create default config directory and file if missing
+    if [ ! -d /etc/retaliq-domain ]; then
+        mkdir -p /etc/retaliq-domain
+        chmod 755 /etc/retaliq-domain
+    fi
+    if [ ! -f /etc/retaliq-domain/config.conf ]; then
+        cat >/etc/retaliq-domain/config.conf <<'EOF'
+# API key will be generated automatically on first run; this file may be
+# edited later if you prefer to specify your own key.
+api_key=
+allowed_ips=127.0.0.1
+EOF
+        chmod 600 /etc/retaliq-domain/config.conf
+    fi
+    # enable and start service
+    systemctl enable retaliq-domain.service >/dev/null || true
+    systemctl start retaliq-domain.service || true
+    # if an old unit file points at a non-system location rewrite it
+    if grep -q "dist/retaliq-domain" /etc/systemd/system/retaliq-domain.service 2>/dev/null; then
+        cat >/etc/systemd/system/retaliq-domain.service <<'EOF'
+[Unit]
+Description=Retaliq domain helper
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/retaliq-domain -config /etc/retaliq-domain/config.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        systemctl restart retaliq-domain.service || true
+    fi
+    # ensure config has an API key by running the helper once in save-config mode
+    if [ -x /usr/bin/retaliq-domain ]; then
+        /usr/bin/retaliq-domain -config /etc/retaliq-domain/config.conf -save-config || true
+    fi
+    ;;
+  upgrade|abort-upgrade|abort-install)
+    # nothing special
+    ;;
+esac
