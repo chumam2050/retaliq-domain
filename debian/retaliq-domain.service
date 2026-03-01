@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/retaliq-domain -config /etc/retaliq-domain/config.conf
+# explicit subcommand keeps unit safe from CLI default changes
+ExecStart=/usr/bin/retaliq-domain serve -config /etc/retaliq-domain/config.conf
 Restart=on-failure
 
 [Install]

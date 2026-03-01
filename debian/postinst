@@ -19,27 +19,25 @@ allowed_ips=127.0.0.1
 EOF
         chmod 600 /etc/retaliq-domain/config.conf
     fi
-    # enable and start service
+    # enable service (will be started after unit rewrite)
     systemctl enable retaliq-domain.service >/dev/null || true
-    systemctl start retaliq-domain.service || true
-    # if an old unit file points at a non-system location rewrite it
-    if grep -q "dist/retaliq-domain" /etc/systemd/system/retaliq-domain.service 2>/dev/null; then
-        cat >/etc/systemd/system/retaliq-domain.service <<'EOF'
+    # always write the canonical unit file so upgrades replace outdated copy
+    cat >/etc/systemd/system/retaliq-domain.service <<'EOF'
 [Unit]
 Description=Retaliq domain helper
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/retaliq-domain -config /etc/retaliq-domain/config.conf
+# explicit "serve" subcommand ensures the service launches the HTTP server
+ExecStart=/usr/bin/retaliq-domain serve -config /etc/retaliq-domain/config.conf
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
-        systemctl daemon-reload
-        systemctl restart retaliq-domain.service || true
-    fi
+    systemctl daemon-reload
+    systemctl restart retaliq-domain.service || true
     # ensure config has an API key by running the helper once in save-config mode
     if [ -x /usr/bin/retaliq-domain ]; then
         /usr/bin/retaliq-domain -config /etc/retaliq-domain/config.conf -save-config || true

@@ -6,6 +6,7 @@ import (
     "log"
     "net/http"
     "os"
+    "os/exec"
     "runtime"
     "strings"
 
@@ -37,10 +38,13 @@ func main() {
         cfgPath = DefaultConfigPath()
     }
 
-    // if we were invoked with a positional command (add-ip, gen-key, show)
-    // handle it and exit without starting the HTTP server.
-    if len(flag.Args()) > 0 {
-        if handled := handleCLI(cfgPath, flag.Args()); handled {
+    // if we were invoked with a positional command (add-ip, gen-key, show,
+    // start, stop, status) then handle it and exit.  otherwise fall through
+    // to start the HTTP server as normal.  This keeps `sudo retaliq-domain`
+    // running as service rather than printing status.
+    args := flag.Args()
+    if len(args) > 0 {
+        if handled := handleCLI(cfgPath, args); handled {
             return
         }
     }
@@ -107,6 +111,9 @@ func main() {
 // handleCLI inspects the first positional argument and performs a
 // quick configuration modification.  Returns true if a command was handled.
 func handleCLI(cfgPath string, args []string) bool {
+    if len(args) == 0 {
+        return false
+    }
     cmd := args[0]
     switch cmd {
     case "add-ip":
@@ -131,6 +138,19 @@ func handleCLI(cfgPath string, args []string) bool {
             log.Fatalf("show failed: %v", err)
         }
         fmt.Printf("api_key=%s\nallowed_ips=%s\n", cfg.APIKey, strings.Join(cfg.AllowedIPs, ","))
+        return true
+    case "status":
+        // print systemd status plus config
+        out, _ := exec.Command("systemctl", "status", "retaliq-domain.service").CombinedOutput()
+        fmt.Print(string(out))
+        // fall through to show config
+        handleCLI(cfgPath, []string{"show"})
+        return true
+    case "start":
+        exec.Command("systemctl", "start", "retaliq-domain.service").Run()
+        return true
+    case "stop":
+        exec.Command("systemctl", "stop", "retaliq-domain.service").Run()
         return true
     default:
         return false

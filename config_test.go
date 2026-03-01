@@ -155,6 +155,11 @@ func TestHandleCLICommands(t *testing.T) {
     if !handleCLI(tmp, []string{"show"}) {
         t.Fatal("show not handled")
     }
+
+    // calling with no args ought not to be treated as CLI (it would start server)
+    if handleCLI(tmp, []string{}) {
+        t.Fatal("empty args should not be handled as CLI")
+    }
 }
 
 func TestOverrideOrdering(t *testing.T) {

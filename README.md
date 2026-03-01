@@ -49,17 +49,28 @@ The script exposes the following commands:
 
 Because the helper usually runs as a long‑lived service, you can manipulate
 its configuration directly via the executable instead of talking to the
-HTTP API. The following invocations are available:
+HTTP API.  Running the binary with **no arguments** behaves like the
+`status` command (see below) rather than starting another server process.
+
+The available invocations are:
 
 ```sh
 # add a single address to allowed_ips
 retaliq-domain add-ip 1.2.3.4
 
 # generate (or renew) API key and print it
-retaliq-domain gen-key
+retaliq-domain gen-key            # alias: generate-key
 
 # dump current config values to stdout
 retaliq-domain show
+
+# control the systemd service that manages the helper
+retaliq-domain start
+retaliq-domain stop
+retaliq-domain status  # also the default with no args
+
+# run the HTTP server (same as running without args when installed as a service)
+retaliq-domain serve
 ```
 
 Under the hood these commands load the same config file used by the service
