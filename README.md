@@ -1,299 +1,162 @@
-# Retaliq Domain Helper Setup Script
+# retaliq-domain
 
-This repository contains a helper script (`setup.sh`) used to manage the
-`retaliq-domain` binary and its accompanying systemd service on Unix-like
-systems. The script is intended to be run as `root` (via `sudo`) and
-uses basic Unix tools for configuration file manipulation (no JSON parser required).
+`retaliq-domain` is a small HTTP helper service used by the
+Retaliq infrastructure to keep a machine's hosts file in sync with a
+centralised list of domains.  A controller (typically running in the
+cloud) POSTs a JSON array of hostnames to `/hosts` and the service
+replaces an inline block in `/etc/hosts` (or the platform equivalent)
+with the supplied entries.
 
-## Prerequisites
+The binary can also be used as a simple configuration helper from the
+command line and is distributed as a Debian package under the name
+`retaliq-domain`.
 
-- A Unix-like system with `systemd`.
-- `bash` (the script uses bashisms).
-- `openssl` (used for API key generation).
-- The `retaliq-domain` binary placed alongside `setup.sh` or adjust `BIN` env.
+---
 
-## Installation
+## Features
 
-Place the script and binary in the same directory, then run:
+* REST endpoint at `/hosts` accepting POST requests with `X-Api-Key` header
+* IP whitelisting by origin address
+* Minimal file-based configuration (`key=value`)
+* Atomic updates of the hosts file preserving existing permissions
+* CLI helpers for configuration and systemd control
+* Cross‑platform support (Linux, macOS, Windows)
+
+---
+
+## Building
+
+The code is written in Go and requires Go 1.18+ on your `PATH`.
 
 ```sh
-sudo ./setup.sh install
+# run the unit tests
+make test
+
+# build for the current platform
+go build -o retaliq-domain .
+
+# or use the convenience targets
+make all       # build everything (deb, windows, macos)
+make deb       # produce a Debian package
+make windows   # cross‑compile Windows executable
+make macos     # cross‑compile macOS executable
 ```
 
-This will create a default configuration file at `/etc/retaliq-domain/config.conf`,
-enable (but not start) the `retaliq-domain.service` unit.
+A Debian package will be created under `dist/` and installs a
+`retaliq-domain.service` systemd unit (see `debian/` directory).
 
-## Available Commands
-
-The script exposes the following commands:
-
-| Command                  | Description |
-|--------------------------|-------------|
-| `install`               | Alias for `start` (install and start the service). |
-| `start`                 | Install if missing, then start the service and
-|                         | show `api_key`, `allowed_ips` and port. |
-| `stop`                  | Stop the service, leaving it installed. |
-| `reload`                | Stop, then start (ensures service installed). |
-| `uninstall`             | Completely remove the service, config, and any running
-|                         | processes. |
-| `status`                | Display `systemctl status` for the unit and print the
-|                         | current config values. |
-| `regenerate-key`        | Generate a new API key in the config and reload service. |
-| `set-allowed-ip-hosts`  | Prompt or accept comma-separated IPs to update allowed
-|                         | host list (appends known local addresses). |
-| `help`                  | Show usage message. |
+---
 
 ## Configuration
 
-### CLI commands
+`retaliq-domain` reads a simple `key=value` file.  Comments begin with
+`#` and are ignored.  Example:
 
-Because the helper usually runs as a long‑lived service, you can manipulate
-its configuration directly via the executable instead of talking to the
-HTTP API.  Running the binary with **no arguments** behaves like the
-`status` command (see below) rather than starting another server process.
+```
+# /etc/retaliq-domain/config.conf
+api_key = s3cr3t
+allowed_ips = 127.0.0.1,10.0.0.5
+```
 
-The available invocations are:
+* `api_key` – the token clients must supply in the `X-Api-Key` header.
+  If the key is missing on first run the service generates one and
+  persists it back to the file.
+* `allowed_ips` – comma‑separated list of addresses permitted to POST.
+
+By default the configuration file is located at
+`/etc/retaliq-domain/config.conf` (on Windows the equivalent under
+`%ProgramData%`).  You can override this with `-config` when starting
+or by passing the `-save-config` flag to write effective settings.
+
+### Command‑line helpers
+
+The same binary acts as a small admin tool.  When invoked with a
+positional command it performs the action and exits:
 
 ```sh
-# add a single address to allowed_ips
-retaliq-domain add-ip 1.2.3.4
+# add a new source address
+sudo retaliq-domain add-ip 192.168.1.100
 
-# generate (or renew) API key and print it
-retaliq-domain gen-key            # alias: generate-key
+# generate / rotate the API key
+sudo retaliq-domain gen-key
+# (alias: generate-key)
 
-# dump current config values to stdout
-retaliq-domain show
+# show the current configuration
+sudo retaliq-domain show
 
-# control the systemd service that manages the helper
-retaliq-domain start
-retaliq-domain stop
-retaliq-domain status  # also the default with no args
-
-# run the HTTP server (same as running without args when installed as a service)
-retaliq-domain serve
+# control the systemd unit (linux only)
+sudo retaliq-domain status
+sudo retaliq-domain start
+sudo retaliq-domain stop
 ```
 
-Under the hood these commands load the same config file used by the service
-and update it atomically; nothing is sent over the network.
+The `-apikey`, `-allowed` and `-port` flags may be used to temporarily
+override the settings read from the file.
 
-## Configuration
+---
 
-The default configuration file (`/etc/retaliq-domain/config.conf`) is a
-simple key/value list with two settings. Blank lines and lines starting with
-`#` are ignored.  If an existing file lacks an `api_key`, the helper will
-automatically generate one and update the file when it starts.
+## HTTP API
 
-```ini
-# API key used to protect the hosts helper; must be non‑empty
-api_key=<random generated key or empty>
+Only `POST /hosts` is implemented.
 
-# comma-separated client addresses allowed to call the service
-allowed_ips=127.0.0.1
+* Request body: JSON array of hostnames, e.g. `[
+  "foo.local",
+  "bar.internal"
+]`
+* Header `X-Api-Key` must match the configured key.
+* The client must connect from an address listed in `allowed_ips`.
+
+On success the service updates the hosts file, replacing the existing
+inline block marked by
+`# BEGIN RETALIQHOSTS inline` … `# END RETALIQHOSTS inline` and
+returns `200 OK`.  Errors are indicated with the usual HTTP status
+codes (401, 403, 400, 500).
+
+
+---
+
+## Hosts file format
+
+Only the contents between the two marker comments are managed.  Entries
+are written with both IPv4 and IPv6 loopback addresses:
+
+```
+# BEGIN RETALIQHOSTS inline
+127.0.0.1  example.local
+::1        example.local
+# END RETALIQHOSTS inline
 ```
 
-**Important:** the `api_key` **must be non‑empty** or the helper will exit on
-startup. The package’s postinst initially writes an empty value, so you
-should either generate one yourself or run the setup script to regenerate
-the key:
+Any other lines in the file are preserved verbatim.
+
+---
+
+## Testing
+
+Unit tests live beside the code.  Run them with:
 
 ```sh
-# create a key and restart service
-sudo ./setup.sh regen-key
-sudo systemctl restart retaliq-domain.service
+go test ./...
 ```
 
-Alternatively edit `/etc/retaliq-domain/config.conf` by hand and give `api_key` a
-value, then reload the service.
+There is no external dependency; the tests exercise configuration
+parsing, CLI handling and the HTTP handler logic.
 
-`set-allowed-ip-hosts` will update the `allowed_ips` array while preserving
-internal known addresses (loopback, host IP, docker bridge).
+---
 
-## Notes
+## Packaging and distribution
 
-- The script enforces running as root and will exit otherwise.
-- An absolute path to the binary is automatically computed but can be
-  overridden via the `BIN` environment variable.
-* `openssl` is required and typically already installed on Unix-like
-  systems.
+The `debian/` directory contains a basic Debian packaging skeleton.  The
+`Makefile` target `make deb` invokes `debian/build.sh` which produces a
+`.deb` suitable for installation on Debian/Ubuntu systems.  The package
+installs the binary and systemd unit described above.
 
-## Program overview
+For Windows/macOS the `make windows` and `make macos` targets create
+simple stand‑alone executables.
 
-The `retaliq-domain` binary is the core helper that the setup script
-manages. It provides an HTTP API for manipulating the system's `/etc/hosts`
-file, mainly so containers and services can request DNS entries at runtime.
+---
 
-### Operation
+## License
 
-* **Port**: defaults to `8888` but may be changed via the `-port`
-  command-line flag.
-* **Hosts file**: writes to `/etc/hosts` on Unix; a Windows path is encoded in
-  `defaultHostsPath()`.
-* **Logging**: minimal info to stdout/stderr; systemd captures logs when
-  running as a service.
-
-### Endpoints
-
-* `POST /hosts` – expects a JSON array of hostnames; the helper adds each
-  name to `/etc/hosts` if not already present. Requires header
-  `X-Api-Key: <key>`.
-* `GET /version` – returns program version and build info (if implemented).
-* Additional endpoints may exist (check source in `handler.go`).
-
-### Configuration and CLI flags
-
-Flags (see `main.go`):
-
-```
--config    path to config file (default /etc/retaliq-domain/config.conf)
--apikey    API key (overrides config file)
--allowed   comma-separated allowed IP addresses
--save-config  write effective config back to file and exit
-```
-
-The file format is key/value as shown above; command-line flags override
-file values.
-
-When invoked with `-save-config`, the helper writes out whatever key/ip list
-is currently in effect and then exits, useful for bootstrapping.
-
-### Example invocation
-
-```sh
-./retaliq-domain -config /etc/retaliq-domain/config.conf
-```
-
-or to generate a config:
-
-```sh
-./retaliq-domain -apikey mysecret -allowed 127.0.0.1,10.0.0.1 -save-config
-```
-
-
-## Docker development environment
-
-A simple container makes it easy to work on the helper without installing
-Go or Debian packaging tools on your host.  It mounts the current directory
-so you can edit files with your favourite editor from the host.
-
-Build the image once:
-
-```sh
-cd apps/domain
-docker build -t retaliq-domain-dev .
-```
-
-If you ever need to wipe out all generated artefacts, the `Makefile` provides
-`make clean`, which removes the `dist` directory plus any local binaries and
-Debian packages:
-
-```sh
-make clean        # equivalent to rm -rf dist && rm -f retaliq-domain*darwin* retaliq-domain*windows* && rm -f ../retaliq-domain_*.deb
-```
-
-You can run that manually on the host or inside the container before starting
-a fresh build.
-
-Start an interactive shell via plain Docker:
-
-```sh
-docker run --rm -it -v "$PWD":/workspace -w /workspace retaliq-domain-dev
-```
-
-or using `docker-compose` with the renamed file (preferred):
-
-```sh
-cd apps/domain
-docker-compose -f compose.yml run --rm dev
-```
-
-You can also set `COMPOSE_FILE=compose.yml` in your environment to avoid the
-`-f` flag.
-
-The compose variant also gives you a named service (`dev`) and simplifies
-rebuilding (`docker-compose build`).
-
-You now have `go`, `make`, `dpkg-buildpackage` etc. inside the container; run
-`make all` or `./debian/build.sh` as you would on your host.
-
-Files generated by the build (binary, `dist/`) are written back into the
-working tree and are ignored by git.
-
-## Packaging as a Debian package
-
-The project includes a `debian/` directory that describes how to build a
-`.deb` package suitable for installation via `apt`.
-
-A helper script at `apps/domain/debian/build.sh` automates versioning and invokes dpkg-buildpackage. The `debian/` directory also contains the systemd unit (`retaliq-domain.service`).
-It derives the package version from the latest Git tag (stripping a leading
-`v` if present), updates `debian/changelog`, and then builds.  Simply run:
-
-```sh
-cd apps/domain
-./debian/build.sh
-```
-
-Dependencies: `git`, `debhelper` (and `devscripts` for `dch` if you
-want automatic changelog updates), `dpkg-dev`, `golang-go` (for building the
-binary), and `build-essential`.
-
-Examples:
-
-```sh
-./debian/build.sh            # build using current tag or 0.1.0
-# resulting .deb and other artefacts appear in the dist/ subdirectory
-```
-
-The `dist/` directory is the canonical output location; when you publish
-packages via an APT repository point the repository at `dist/` and
-regenerate the `Packages.gz` index there. For instance:
-
-```sh
-cd apps/domain/dist
-apt-ftparchive packages . > Packages
-gzip -c Packages > Packages.gz
-# serve this folder over HTTP and let clients add its URL
-```
-
-This will compile the Go binary and produce
-`../retaliq-domain_<version>_<arch>.deb`.  Install with:
-
-```sh
-sudo dpkg -i ../retaliq-domain_*.deb
-```
-
-Once installed, the service is automatically enabled and started.  The
-package’s maintenance scripts handle configuration file creation and
-removal.
-
-To make the package available via `apt-get`, host the `.deb` in an APT
-repository (see Debian's packaging guide) and instruct users to add its
-`deb` line to `/etc/apt/sources.list`.
-
-Additional repository management (signing, Release files) is outside the
-scope of this repo but can be automated in CI.
-
-
-
-## Example Usage
-
-You can manage the service either via the helper script or directly with
-`systemctl` once the package is installed.
-
-```sh
-# using the setup helper
-sudo ./setup.sh status          # show status + config
-sudo ./setup.sh start           # install (if necessary) and launch
-sudo ./setup.sh stop            # stop but keep unit installed
-sudo ./setup.sh reload          # restart service
-sudo ./setup.sh regenerate-key  # new API key
-sudo ./setup.sh set-allowed-ip-hosts 10.0.0.5,8.8.8.8
-sudo ./setup.sh uninstall       # full cleanup
-
-# or use systemctl directly
-sudo systemctl status retaliq-domain.service   # check current state
-sudo systemctl start retaliq-domain.service    # start service
-sudo systemctl stop retaliq-domain.service     # stop it
-sudo systemctl daemon-reload                   # reload unit after changes
-```
-
-Feel free to modify the script or README to suit your environment.
+This project is released under the MIT License.  See the top‑level
+`LICENSE` file for details.
