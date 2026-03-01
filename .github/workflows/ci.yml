@@ -43,19 +43,18 @@ jobs:
 
       - name: Install rclone
         run: |
-          # Official Rclone install script
           sudo curl https://rclone.org/install.sh | sudo bash
 
       - name: Configure rclone
         run: |
           mkdir -p ~/.config/rclone/
-          printf '%s' "${{ secrets.RCLONE_CONFIG }}" > ~/.config/rclone/rclone.conf
-      - name: Verify Rclone Setup
-        run: |
-          # This helps you debug if the config is read correctly
-          rclone listremotes
+          # 1. Decode the Base64 secret back into a real .json file
+          echo "${{ secrets.GDRIVE_SA_BASE64 }}" | base64 -d > ~/.config/rclone/service-account.json
+          
+          # 2. Create a clean rclone.conf that points to this file
+          # We don't embed the JSON here, we just reference the file!
+          printf "[gdrive]\ntype = drive\nscope = drive\nservice_account_file = /home/runner/.config/rclone/service-account.json" > ~/.config/rclone/rclone.conf
 
       - name: Upload to Google Drive
         run: |
-          # Copy files to your specific folder path
           rclone copy dist/ gdrive:retaliq/repos
